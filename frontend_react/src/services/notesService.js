@@ -15,7 +15,13 @@ import { supabase } from '../lib/supabase';
  */
 function handleError(error, fallbackMessage) {
   if (error) {
-    const msg = error.message || fallbackMessage || 'Unknown error';
+    // Extract the detailed error message from Supabase error object
+    const msg = error.message || 
+                (error.error_description) || 
+                (error.details) ||
+                fallbackMessage || 
+                'Unknown error';
+    console.error('Supabase error:', error);
     throw new Error(msg);
   }
 }
@@ -24,6 +30,9 @@ function handleError(error, fallbackMessage) {
  * Map row into app-friendly note object.
  */
 function mapNote(row) {
+  if (!row) {
+    throw new Error('Invalid note data received from server');
+  }
   return {
     id: row.id,
     title: row.title ?? '',
@@ -73,14 +82,32 @@ export async function getNoteById(id) {
 export async function createNote({ title, content }) {
   /** Create a new note. Returns created note. */
   const now = new Date().toISOString();
-  const { data, error } = await supabase
-    .from('notes')
-    .insert([{ title: title ?? '', content: content ?? '', updated_at: now }])
-    .select()
-    .single();
+  const noteData = {
+    title: title || 'Untitled',
+    content: content || '',
+    created_at: now,
+    updated_at: now
+  };
 
-  handleError(error, 'Failed to create note');
-  return mapNote(data);
+  try {
+    const { data, error } = await supabase
+      .from('notes')
+      .insert([noteData])
+      .select()
+      .single();
+
+    if (error) {
+      handleError(error, 'Failed to create note');
+    }
+
+    if (!data) {
+      throw new Error('No data returned after creating note');
+    }
+
+    return mapNote(data);
+  } catch (error) {
+    handleError(error, 'Failed to create note');
+  }
 }
 
 // PUBLIC_INTERFACE
